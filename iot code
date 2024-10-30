@@ -1,0 +1,78 @@
+pip install torch torchvision opencv-python gtts
+
+
+import cv2
+import torch
+from gtts import gTTS
+import os
+import time
+import random
+
+
+# Load the YOLOv5 model from Torch Hub
+model = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=True)
+
+def detect_objects(frame):
+    """
+    Run object detection on a frame from the camera feed.
+    Returns detected objects and their labels.
+    """
+    results = model(frame)
+    labels, coordinates = results.names, results.xyxy[0].numpy()
+    objects = [(labels[int(box[5])], box[:4]) for box in coordinates]
+    return objects
+
+
+def provide_voice_guidance(text):
+    """
+    Convert text to speech for voice guidance.
+    Saves the audio as an mp3 and plays it.
+    """
+    tts = gTTS(text=text, lang='en')
+    filename = "guidance.mp3"
+    tts.save(filename)
+    os.system(f"mpg123 {filename}")  # Plays the audio file (works on Linux)
+    os.remove(filename)
+
+
+def main():
+    # Initialize camera
+    cap = cv2.VideoCapture(0)
+
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        # Detect objects in the frame
+        objects = detect_objects(frame)
+        for label, box in objects:
+            x1, y1, x2, y2 = box
+            # Draw a bounding box on detected objects
+            cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
+            cv2.putText(frame, label, (int(x1), int(y1) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+
+            # Provide guidance for detected objects
+            guidance_text = f"Detected {label} ahead."
+            print(guidance_text)
+            provide_voice_guidance(guidance_text)
+
+        # Show the frame with bounding boxes
+        cv2.imshow("Vision Assist - Camera Feed", frame)
+
+        # Simulate GPS data every 10 seconds
+        if int(time.time()) % 10 == 0:
+            lat, long = get_gps_location()
+            gps_message = f"Your current location is latitude {lat:.4f} and longitude {long:.4f}."
+            print(gps_message)
+            provide_voice_guidance(gps_message)
+
+        # Break the loop if 'q' is pressed
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+if _name_ == "_main_":
+    main()
